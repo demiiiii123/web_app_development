@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    points INTEGER DEFAULT 0,
+    matches_played INTEGER DEFAULT 0,
+    matches_won INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    password TEXT,
+    status TEXT DEFAULT 'waiting',
+    max_players INTEGER DEFAULT 4,
+    host_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(host_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS room_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    is_ready BOOLEAN DEFAULT 0,
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS game_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER,
+    winner_id INTEGER,
+    game_type TEXT NOT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE SET NULL,
+    FOREIGN KEY(winner_id) REFERENCES users(id) ON DELETE SET NULL
+);
