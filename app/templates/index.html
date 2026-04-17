@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mt-4">
+    <!-- 登入區塊 -->
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0">立即登入</h4>
+            </div>
+            <div class="card-body p-4 d-flex flex-column justify-content-center">
+                <form action="{{ url_for('auth.login') }}" method="POST">
+                    <div class="mb-3">
+                        <label for="login-username" class="form-label text-muted fw-bold">帳號名稱</label>
+                        <input type="text" class="form-control form-control-lg bg-light" id="login-username" name="username" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="login-password" class="form-label text-muted fw-bold">登入密碼</label>
+                        <input type="password" class="form-control form-control-lg bg-light" id="login-password" name="password" required>
+                    </div>
+                    <div class="d-grid gap-2 mt-auto">
+                        <button type="submit" class="btn btn-primary btn-lg">進入大廳</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 註冊區塊 -->
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-secondary text-white text-center py-3">
+                <h4 class="mb-0">建立新帳號</h4>
+            </div>
+            <div class="card-body p-4 d-flex flex-column justify-content-center">
+                <form action="{{ url_for('auth.register') }}" method="POST">
+                    <div class="mb-3">
+                        <label for="register-username" class="form-label text-muted fw-bold">選擇一個響亮的名稱</label>
+                        <input type="text" class="form-control form-control-lg bg-light" id="register-username" name="username" required>
+                        <div class="form-text">註冊後無法修改，請使用獨特且容易辨認的名字。</div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-password" class="form-label text-muted fw-bold">設定密碼</label>
+                        <input type="password" class="form-control form-control-lg bg-light" id="register-password" name="password" required>
+                    </div>
+                    <div class="d-grid gap-2 mt-auto">
+                        <button type="submit" class="btn btn-outline-secondary btn-lg">免費註冊</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
