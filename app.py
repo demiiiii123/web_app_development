@@ -6,7 +6,7 @@ import os
 socketio = SocketIO()
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
     # 載入設定參數
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_default_secret_key')
     app.config['DATABASE'] = os.path.join(app.instance_path, 'database.db')
@@ -32,4 +32,4 @@ app = create_app()
 
 if __name__ == '__main__':
     # 使用 socketio.run 啟動伺服器，支援 WebSocket
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
