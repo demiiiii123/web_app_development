@@ -20,9 +20,11 @@ def create_app():
     # 將 SocketIO 綁定到 app 上
     socketio.init_app(app)
 
-    from app.routes import auth_routes, lobby_routes
-    app.register_blueprint(auth_routes.bp)
-    app.register_blueprint(lobby_routes.bp)
+    from app.routes import auth, lobby, room, game
+    app.register_blueprint(auth.auth_bp)
+    app.register_blueprint(lobby.lobby_bp)
+    app.register_blueprint(room.room_bp, url_prefix='/room')
+    app.register_blueprint(game.game_bp, url_prefix='/game')
 
     return app
 
