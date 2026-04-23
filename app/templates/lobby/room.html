@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0">遊戲房間等待區</h4>
+            </div>
+            <div class="card-body text-center">
+                <h5 class="text-muted mb-3">邀請碼</h5>
+                <h1 class="display-4 fw-bold letter-spacing-2 mb-4 text-primary">{{ room.invite_code }}</h1>
+                <p class="text-muted">將此代碼分享給朋友，邀請他們加入房間</p>
+                
+                <hr class="my-4">
+                
+                <h5 class="mb-3">目前玩家 ({{ players|length }})</h5>
+                <ul class="list-group list-group-flush text-start w-75 mx-auto mb-4">
+                    {% for player in players %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold">{{ player.username }}</span>
+                            {% if player.is_guest %}
+                                <span class="badge bg-secondary ms-2">訪客</span>
+                            {% endif %}
+                            {% if player.user_id == room.host_id %}
+                                <span class="badge bg-warning text-dark ms-2">房主</span>
+                            {% endif %}
+                        </div>
+                        <span class="badge bg-success rounded-pill">已加入</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <div class="d-flex justify-content-center gap-3">
+                    <form action="{{ url_for('room.leave_room', invite_code=room.invite_code) }}" method="POST">
+                        <button type="submit" class="btn btn-outline-danger">離開房間</button>
+                    </form>
+                    
+                    {% if is_host %}
+                    <form action="{{ url_for('room.start_game', invite_code=room.invite_code) }}" method="POST">
+                        <button type="submit" class="btn btn-success px-5">開始遊戲</button>
+                    </form>
+                    {% else %}
+                    <button class="btn btn-secondary px-5" disabled>等待房主開始...</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // 每 2 秒重新整理頁面以取得最新玩家列表
+    // MVP 階段使用簡單的 reload
+    setInterval(function() {
+        window.location.reload();
+    }, 2000);
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>遊戲進行中 - {{ room.invite_code }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+</head>
+<body class="game-body">
+    <div class="game-container">
+        <!-- 頂部資訊 -->
+        <div class="game-header d-flex justify-content-between align-items-center p-3">
+            <div class="room-info">
+                <span class="badge bg-dark border border-secondary fs-6">房間: {{ room.invite_code }}</span>
+            </div>
+            <div class="player-info text-end">
+                <span class="text-light">您好，<strong class="text-info">{{ current_user.username }}</strong></span>
+            </div>
+        </div>
+
+        <!-- 分數板 -->
+        <div class="scoreboard-container text-center mt-4">
+            <h2 class="text-uppercase tracking-widest text-secondary mb-4">戰況排行榜</h2>
+            <div class="row justify-content-center" id="players-container">
+                <!-- 透過 JS 動態產生玩家卡片 -->
+            </div>
+        </div>
+
+        <!-- 互動區 -->
+        <div class="action-area text-center mt-auto mb-5 pb-5">
+            <button id="score-btn" class="game-btn pulse-animation">
+                <span class="btn-text">獲得分數!</span>
+                <span class="btn-glitch"></span>
+            </button>
+            <p class="text-muted mt-3 fs-6">點擊按鈕來增加你的分數（先達到 50 分者獲勝）</p>
+        </div>
+
+        <!-- 遊戲結束遮罩 -->
+        <div id="game-over-overlay" class="game-over-overlay d-none">
+            <div class="game-over-content text-center">
+                <h1 class="display-1 text-warning fw-bold mb-3">GAME OVER</h1>
+                <h3 class="text-light mb-4">獲勝者是 <span id="winner-name" class="text-success fw-bold"></span>!</h3>
+                <a href="{{ url_for('lobby.index') }}" class="btn btn-outline-light btn-lg px-5 mt-4">返回大廳</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const inviteCode = '{{ room.invite_code }}';
+        const currentUserId = {{ current_user.id }};
+        const playersContainer = document.getElementById('players-container');
+        const scoreBtn = document.getElementById('score-btn');
+        const gameOverOverlay = document.getElementById('game-over-overlay');
+        const winnerNameSpan = document.getElementById('winner-name');
+
+        let isGameOver = false;
+
+        // 取得最新狀態並更新畫面
+        async function fetchGameStatus() {
+            if (isGameOver) return;
+            
+            try {
+                const response = await fetch(`/api/game/${inviteCode}/status`);
+                if (response.status === 401 || response.status === 404) {
+                    window.location.href = '/lobby';
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'finished') {
+                    isGameOver = true;
+                    // 如果後端狀態已結束，嘗試找出最高分
+                    const winner = data.players.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+                    showGameOver(winner.username);
+                    return;
+                }
+
+                updateScoreboard(data.players);
+            } catch (error) {
+                console.error("Failed to fetch status:", error);
+            }
+        }
+
+        // 更新分數板 UI
+        function updateScoreboard(players) {
+            // 依照分數排序
+            players.sort((a, b) => b.score - a.score);
+            
+            playersContainer.innerHTML = '';
+            players.forEach((player, index) => {
+                const isMe = player.user_id === currentUserId;
+                const rankClass = index === 0 && player.score > 0 ? 'rank-1' : '';
+                
+                const cardHtml = `
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="player-card ${isMe ? 'is-me' : ''} ${rankClass}">
+                            <div class="player-name">${player.username} ${isMe ? '(你)' : ''}</div>
+                            <div class="player-score">${player.score}</div>
+                        </div>
+                    </div>
+                `;
+                playersContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        // 點擊按鈕得分
+        scoreBtn.addEventListener('click', async () => {
+            if (isGameOver) return;
+            
+            scoreBtn.disabled = true;
+            try {
+                const response = await fetch(`/api/game/${inviteCode}/play`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action_type: 'score', value: Math.floor(Math.random() * 5) + 1 })
+                });
+                
+                const data = await response.json();
+                if (data.game_over) {
+                    isGameOver = true;
+                    // 找出獲勝者名稱
+                    const playersResp = await fetch(`/api/game/${inviteCode}/status`);
+                    const playersData = await playersResp.json();
+                    const winner = playersData.players.find(p => p.user_id === data.winner_id);
+                    showGameOver(winner ? winner.username : 'Unknown');
+                } else {
+                    fetchGameStatus();
+                }
+            } catch (error) {
+                console.error("Action failed:", error);
+            } finally {
+                setTimeout(() => { scoreBtn.disabled = false; }, 300); // 簡單的 CD 時間
+            }
+        });
+
+        function showGameOver(winnerName) {
+            winnerNameSpan.textContent = winnerName;
+            gameOverOverlay.classList.remove('d-none');
+            gameOverOverlay.classList.add('d-flex');
+        }
+
+        // 每秒輪詢更新狀態
+        setInterval(fetchGameStatus, 1000);
+        
+        // 初始載入
+        fetchGameStatus();
+    </script>
+</body>
+</html>

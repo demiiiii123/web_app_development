@@ -1,32 +1,30 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from app.models.user import User
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/', methods=['GET'])
 def index():
-    """
-    首頁/登入頁面
-    - 若 session 中已有 user_id，重導向到 /lobby
-    - 否則渲染 auth/login.html
-    """
-    pass
+    if 'user_id' in session:
+        return redirect(url_for('lobby.index'))
+    return render_template('auth/login.html')
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """
-    處理訪客登入
-    - 接收表單 username
-    - 建立 User 資料 (is_guest=True)
-    - 儲存 user_id 到 session
-    - 重導向到 /lobby
-    """
-    pass
+    username = request.form.get('username')
+    if not username or len(username.strip()) == 0:
+        flash("請輸入有效的暱稱", "error")
+        return redirect(url_for('auth.index'))
+        
+    user = User.create(username.strip(), is_guest=True)
+    if user:
+        session['user_id'] = user.id
+        return redirect(url_for('lobby.index'))
+        
+    flash("登入失敗，請稍後再試", "error")
+    return redirect(url_for('auth.index'))
 
 @auth_bp.route('/logout', methods=['GET'])
 def logout():
-    """
-    登出
-    - 清除 session
-    - 重導向到 /
-    """
-    pass
+    session.pop('user_id', None)
+    return redirect(url_for('auth.index'))

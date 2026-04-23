@@ -1,33 +1,69 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
+from app.models.room import Room, RoomPlayer
+from app.models.game import GameHistory
+from app.models.user import User
 
 game_bp = Blueprint('game', __name__)
 
 @game_bp.route('/<invite_code>', methods=['GET'])
 def game_view(invite_code):
-    """
-    遊戲主畫面
-    - 驗證使用者是否在該房間，且房間狀態為 playing
-    - 渲染 game/index.html (包含前端 JS)
-    """
-    pass
+    if 'user_id' not in session:
+        return redirect(url_for('auth.index'))
+        
+    room = Room.get_by_invite_code(invite_code)
+    if not room or room.status != 'playing':
+        return redirect(url_for('room.waiting_room', invite_code=invite_code))
+        
+    players = RoomPlayer.get_players_in_room(room.id)
+    is_in_room = any(p['user_id'] == session['user_id'] for p in players)
+    if not is_in_room:
+        return redirect(url_for('lobby.index'))
+        
+    current_user = User.get_by_id(session['user_id'])
+    return render_template('game/index.html', room=room, players=players, current_user=current_user)
 
 @game_bp.route('/api/<invite_code>/status', methods=['GET'])
 def game_status(invite_code):
-    """
-    [API] 取得當前遊戲狀態
-    - 查詢房間內所有玩家的分數與準備狀態
-    - 查詢當前回合資訊
-    - 回傳 JSON
-    """
-    pass
+    if 'user_id' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    room = Room.get_by_invite_code(invite_code)
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+        
+    players = RoomPlayer.get_players_in_room(room.id)
+    return jsonify({
+        "status": room.status,
+        "players": players
+    })
 
 @game_bp.route('/api/<invite_code>/play', methods=['POST'])
 def game_play(invite_code):
-    """
-    [API] 執行玩家動作
-    - 接收前端 JSON (動作類型、參數)
-    - 遊戲核心邏輯仲裁：是否合法？是否得分？是否分出勝負？
-    - 若結束，更新 Room 狀態為 finished，建立 GameHistory
-    - 回傳 JSON (成功與否、最新狀態)
-    """
-    pass
+    if 'user_id' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    room = Room.get_by_invite_code(invite_code)
+    if not room or room.status != 'playing':
+        return jsonify({"error": "Invalid room state"}), 400
+        
+    user_id = session['user_id']
+    data = request.json
+    action_type = data.get('action_type')
+    
+    # 通用的 MVP 得分邏輯
+    if action_type == 'score':
+        points = data.get('value', 1)
+        RoomPlayer.update_score(room.id, user_id, points)
+        
+        # 檢查是否有人獲勝 (例如先達到 50 分)
+        players = RoomPlayer.get_players_in_room(room.id)
+        winner = next((p for p in players if p['score'] >= 50), None)
+        
+        if winner:
+            Room.update_status(room.id, 'finished')
+            GameHistory.create(room.id, winner['user_id'])
+            return jsonify({"success": True, "game_over": True, "winner_id": winner['user_id']})
+            
+        return jsonify({"success": True, "game_over": False})
+        
+    return jsonify({"error": "Unknown action"}), 400

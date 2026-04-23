@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-md-4 mb-4">
+        <!-- 玩家資訊卡片 -->
+        <div class="card shadow-sm h-100 border-primary">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <span class="display-1">👋</span>
+                </div>
+                <h3 class="card-title text-primary">{{ current_user.username }}</h3>
+                <p class="text-muted">{% if current_user.is_guest %}訪客玩家{% else %}正式會員{% endif %}</p>
+                <a href="{{ url_for('lobby.profile') }}" class="btn btn-outline-primary mt-2">查看我的戰績</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- 房間操作區 -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">加入朋友的房間</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('room.join_room') }}" method="POST" class="d-flex gap-3">
+                    <input type="text" name="invite_code" class="form-control form-control-lg" placeholder="請輸入 6 碼邀請碼" required autocomplete="off" maxlength="6" style="text-transform: uppercase;">
+                    <button type="submit" class="btn btn-success btn-lg px-4">加入</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-info">
+            <div class="card-body text-center py-5">
+                <h4 class="mb-4">自己開一桌？</h4>
+                <form action="{{ url_for('room.create_room') }}" method="POST">
+                    <button type="submit" class="btn btn-info btn-lg text-white px-5 rounded-pill shadow">建立專屬房間</button>
+                </form>
+                <p class="text-muted mt-3 mb-0"><small>建立房間後會產生專屬邀請碼，分享給朋友即可同樂</small></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
