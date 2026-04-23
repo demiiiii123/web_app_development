@@ -1,96 +1,106 @@
-import sqlite3
-from . import get_db_connection
+from .db import get_db_connection
+import string
+import random
 
-def create(data):
-    """
-    新增一筆遊戲房間記錄。
-    :param data: 字典，包含 'name', 'host_id', 以及選填的 'password'
-    :return: 新建房間的 ID (成功)，或 None (失敗)
-    """
-    try:
+class Room:
+    def __init__(self, id, invite_code, host_id, status, created_at):
+        self.id = id
+        self.invite_code = invite_code
+        self.host_id = host_id
+        self.status = status
+        self.created_at = created_at
+
+    @staticmethod
+    def _generate_invite_code(length=6):
+        letters_and_digits = string.ascii_uppercase + string.digits
+        return ''.join(random.choice(letters_and_digits) for i in range(length))
+
+    @staticmethod
+    def create(host_id):
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # 產生唯一邀請碼
+        while True:
+            invite_code = Room._generate_invite_code()
+            exist = cursor.execute('SELECT id FROM rooms WHERE invite_code = ?', (invite_code,)).fetchone()
+            if not exist:
+                break
+
         cursor.execute(
-            """INSERT INTO rooms (name, password, host_id, status)
-               VALUES (?, ?, ?, 'waiting')""",
-            (data.get('name'), data.get('password', ''), data.get('host_id'))
+            'INSERT INTO rooms (invite_code, host_id, status) VALUES (?, ?, ?)',
+            (invite_code, host_id, 'waiting')
         )
         conn.commit()
-        last_id = cursor.lastrowid
+        room_id = cursor.lastrowid
         conn.close()
-        return last_id
-    except sqlite3.Error as e:
-        print(f"Room create 錯誤: {e}")
+        return Room.get_by_id(room_id)
+
+    @staticmethod
+    def get_by_id(room_id):
+        conn = get_db_connection()
+        row = conn.execute('SELECT * FROM rooms WHERE id = ?', (room_id,)).fetchone()
+        conn.close()
+        if row:
+            return Room(row['id'], row['invite_code'], row['host_id'], row['status'], row['created_at'])
         return None
 
-def get_all():
-    """
-    取得所有房間記錄，包含狀態為 waiting 的房間 (可作為大廳使用)。
-    :return: 房間紀錄列表
-    """
-    try:
+    @staticmethod
+    def get_by_invite_code(invite_code):
         conn = get_db_connection()
-        # 加入 JOIN 以取得房主名稱
-        sql = """SELECT rooms.*, users.username AS host_name 
-                 FROM rooms 
-                 LEFT JOIN users ON rooms.host_id = users.id
-                 ORDER BY rooms.created_at DESC"""
-        rooms = conn.execute(sql).fetchall()
+        row = conn.execute('SELECT * FROM rooms WHERE invite_code = ?', (invite_code,)).fetchone()
         conn.close()
-        return [dict(row) for row in rooms]
-    except sqlite3.Error as e:
-        print(f"Room get_all 錯誤: {e}")
-        return []
-
-def get_by_id(room_id):
-    """
-    依照 ID 取得單筆房間紀錄。
-    :param room_id: 房間 ID
-    :return: 包含房間資訊的字典，若無則為 None
-    """
-    try:
-        conn = get_db_connection()
-        room = conn.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone()
-        conn.close()
-        return dict(room) if room else None
-    except sqlite3.Error as e:
-        print(f"Room get_by_id 錯誤: {e}")
+        if row:
+            return Room(row['id'], row['invite_code'], row['host_id'], row['status'], row['created_at'])
         return None
 
-def update(room_id, data):
-    """
-    更新特定房間記錄 (例如遊戲狀態改變：waiting -> playing -> closed)。
-    :param room_id: 房間 ID
-    :param data: 欲更新的欄位字典
-    :return: 是否成功更新
-    """
-    try:
+    @staticmethod
+    def update_status(room_id, status):
         conn = get_db_connection()
-        set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
-        values = list(data.values())
-        values.append(room_id)
-        
-        sql = f"UPDATE rooms SET {set_clause} WHERE id = ?"
-        conn.execute(sql, values)
+        conn.execute('UPDATE rooms SET status = ? WHERE id = ?', (status, room_id))
         conn.commit()
         conn.close()
-        return True
-    except sqlite3.Error as e:
-        print(f"Room update 錯誤: {e}")
-        return False
 
-def delete(room_id):
-    """
-    刪除特定房間 (例如遊戲結束解散)。
-    :param room_id: 房間 ID
-    :return: 是否成功刪除
-    """
-    try:
+
+class RoomPlayer:
+    @staticmethod
+    def join_room(room_id, user_id):
         conn = get_db_connection()
-        conn.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
+        # 檢查是否已在房間內
+        exist = conn.execute('SELECT id FROM room_players WHERE room_id = ? AND user_id = ?', (room_id, user_id)).fetchone()
+        if not exist:
+            conn.execute(
+                'INSERT INTO room_players (room_id, user_id, score, is_ready) VALUES (?, ?, 0, 0)',
+                (room_id, user_id)
+            )
+            conn.commit()
+        conn.close()
+
+    @staticmethod
+    def get_players_in_room(room_id):
+        conn = get_db_connection()
+        rows = conn.execute('''
+            SELECT rp.*, u.username, u.is_guest 
+            FROM room_players rp
+            JOIN users u ON rp.user_id = u.id
+            WHERE rp.room_id = ?
+        ''', (room_id,)).fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def update_score(room_id, user_id, score_delta):
+        conn = get_db_connection()
+        conn.execute(
+            'UPDATE room_players SET score = score + ? WHERE room_id = ? AND user_id = ?',
+            (score_delta, room_id, user_id)
+        )
         conn.commit()
         conn.close()
-        return True
-    except sqlite3.Error as e:
-        print(f"Room delete 錯誤: {e}")
-        return False
+    
+    @staticmethod
+    def leave_room(room_id, user_id):
+        conn = get_db_connection()
+        conn.execute('DELETE FROM room_players WHERE room_id = ? AND user_id = ?', (room_id, user_id))
+        conn.commit()
+        conn.close()

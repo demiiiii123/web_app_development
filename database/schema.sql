@@ -1,24 +1,40 @@
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS rooms;
+-- database/schema.sql
 
--- 會員資料表
-CREATE TABLE users (
+-- 玩家表
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    wins INTEGER DEFAULT 0,
-    games_played INTEGER DEFAULT 0,
-    score INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    username TEXT NOT NULL,
+    is_guest BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 遊戲房間資料表
-CREATE TABLE rooms (
+-- 房間表
+CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    password TEXT,
+    invite_code TEXT NOT NULL UNIQUE,
     host_id INTEGER NOT NULL,
-    status TEXT DEFAULT 'waiting', -- waiting, playing, closed
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (host_id) REFERENCES users (id)
+    status TEXT NOT NULL DEFAULT 'waiting', -- waiting, playing, finished
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+-- 房間內玩家關聯表
+CREATE TABLE IF NOT EXISTS room_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    score INTEGER DEFAULT 0,
+    is_ready BOOLEAN DEFAULT 0,
+    FOREIGN KEY (room_id) REFERENCES rooms (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+-- 遊戲歷史紀錄表
+CREATE TABLE IF NOT EXISTS game_histories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    winner_id INTEGER NOT NULL,
+    ended_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES rooms (id) ON DELETE CASCADE,
+    FOREIGN KEY (winner_id) REFERENCES users (id) ON DELETE CASCADE
 );
