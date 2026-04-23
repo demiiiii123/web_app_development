@@ -1,104 +1,88 @@
-# 流程圖設計文件 (Flowchart)
+# 流程圖文件 (Flowchart Design)
 
-本文件基於線上桌遊系統的需求說明 (PRD) 與系統架構 (ARCHITECTURE) 產出，以視覺化的方式呈現使用者的操作動線及系統的資料傳遞流程，確保前後端開發對齊邏輯。
-
----
+這份文件基於 PRD 需求與系統架構，透過視覺化的圖表來說明使用者的操作路徑（User Flow），以及系統內部元件之間的資料流動（System Flow）。
 
 ## 1. 使用者流程圖 (User Flow)
 
-此圖描述使用者從一開始打開網站後，直到註冊登入、瀏覽大廳、加入房間遊玩到最終查看戰績的一系列操作路徑。
+這張圖展示了玩家從進入網站開始，到建立房間、進行遊戲、最後結算的完整操作路徑。
 
 ```mermaid
 flowchart LR
-    Start([使用者開啟網站]) --> Index[首頁 / 登入頁]
+    Start([使用者開啟網站]) --> Auth{是否有登入或\n設定訪客暱稱？}
+    Auth -->|否| Login[登入 / 訪客設定頁面]
+    Auth -->|是| Lobby[大廳主頁]
     
-    Index -- 無帳號 --> Register[點擊註冊]
-    Register --> RegisterForm[填寫註冊表單]
-    RegisterForm -- 成功註冊 --> Index
+    Login --> Lobby
     
-    Index -- 有帳號 --> Login[輸入帳密登入]
-    Login -- 驗證失敗 --> Index
-    Login -- 驗證成功 --> Lobby[進入遊戲大廳]
+    Lobby --> Action{選擇動作}
+    Action -->|查看個人紀錄| History[成就與戰績頁面]
+    History --> Lobby
+    Action -->|建立專屬房間| CreateRoom[建立新房間 (產生邀請碼)]
+    Action -->|加入朋友房間| JoinRoom[輸入邀請碼加入]
     
-    Lobby --> LobbyDecisions{選擇操作}
+    CreateRoom --> Room[遊戲房間等待區]
+    JoinRoom --> Room
     
-    LobbyDecisions -- 建立房間 --> CreateRoom[填寫房間設定與人數限制]
-    CreateRoom --> Room[進入專屬房間]
+    Room -->|等待人數湊齊| Chat[房間內聊天/準備]
+    Room -->|房主按下開始| Game[進入遊戲主畫面]
     
-    LobbyDecisions -- 瀏覽與加入 --> JoinRoom[選擇房間並輸入密碼]
-    JoinRoom -- 密碼正確 --> Room
-    JoinRoom -- 錯誤 --> Lobby
+    Game --> GameLoop{遊戲進行中}
+    GameLoop -->|輪到我的回合| Play[執行遊戲動作]
+    GameLoop -->|他人回合| Wait[等待並觀看動態計分更新]
+    Play --> CheckWin{智慧化仲裁}
+    CheckWin -->|遊戲繼續| GameLoop
+    CheckWin -->|遊戲結束| End[結算畫面\n(顯示最終分數與解鎖成就)]
     
-    LobbyDecisions -- 查看戰績 --> Profile[個人中心：查看勝率與排行榜]
-    Profile --> Lobby
-    
-    Room --> RoomDecisions{房間內互動}
-    RoomDecisions -- 即時通訊 --> Chat[於聊天室發送文字] --> RoomDecisions
-    RoomDecisions -- 準備就緒 --> Ready[點擊準備] --> RoomDecisions
-    
-    RoomDecisions -- 房主開始遊戲 --> GameStart[進入遊戲階段]
-    GameStart --> GamePlay[輪流進行遊戲操作]
-    GamePlay -- 遊戲進行中 --> GamePlay
-    GamePlay -- 滿足分出勝負條件 --> GameOver[顯示結算畫面與積分更新] --> Room
-    
-    RoomDecisions -- 離開 --> Leave[退出房間回到大廳] --> Lobby
+    End -->|離開房間| Lobby
+    End -->|再玩一局| Room
 ```
 
----
+## 2. 系統序列圖 (System Sequence Diagram)
 
-## 2. 系統序列圖 (Sequence Diagram)
-
-此序列圖描述 MVP 中最重要的核心邏輯之一：**使用者從大廳點擊「建立新房間」到資料庫建立資料，並順利進入房間** 的系統資料流通訊完整過程。
+這張圖以「遊戲進行中，玩家執行一個動作（例如出牌或移動）」為例，展示前端瀏覽器、Flask Route、Model 與資料庫之間如何互動，以完成動態計分與狀態更新。
 
 ```mermaid
 sequenceDiagram
-    actor User as 使用者
-    participant Browser as 使用者瀏覽器
-    participant Flask as Flask Controller (routes)
-    participant Model as Database Model (Room)
+    actor Player as 當前玩家 (瀏覽器)
+    participant Route as Flask (Controller)
+    participant Model as Game Logic (Model)
     participant DB as SQLite 資料庫
+    participant Other as 其他玩家 (瀏覽器)
 
-    User->>Browser: 填寫建房表單並點擊「建立」
-    Browser->>Flask: POST /room/create (表單資料: 房間名, 密碼等)
-    Flask->>Flask: 檢查使用者 Session 是否具備登入資格
+    Player->>Route: POST /api/game/<id>/play (傳送玩家動作)
     
-    alt 尚未登入或權限不足
-        Flask-->>Browser: 拒絕存取，HTTP 302 導回首頁
-    else 驗證成功
-        Flask->>Model: 呼叫 Room.create(...)
-        Model->>DB: 執行 INSERT INTO rooms ...
-        DB-->>Model: 回傳新建立的 Room ID
-        Model-->>Flask: 取得剛建立的房間實例
-        Flask-->>Browser: HTTP 302 Redirect 到 /room/<RoomID>
-        
-        Note over Browser, Flask: 進入房間頁面並建立即時連線
-        Browser->>Flask: GET /room/<RoomID>
-        Flask-->>Browser: 透過 Jinja2 回傳 room.html (含房間現狀資料)
-        Browser->>Flask: 解析完 HTML，連線 WebSocket (emit 'join')
-        Flask->>Model: 更新玩家狀態與 Socket 綁定
-        Model->>DB: UPDATE rooms SET players = ...
-        DB-->>Model: 成功
-        Model-->>Flask: 成功
-        Flask-->>Browser: 推播推播更新事件 (broadcast 'room_update') 給全房玩家
-    end
+    Route->>Model: 呼叫仲裁邏輯 (驗證動作是否合法)
+    Model->>DB: SELECT 讀取當前遊戲狀態
+    DB-->>Model: 回傳狀態
+    
+    Model->>Model: 計算分數、切換回合、判斷勝負
+    
+    Model->>DB: UPDATE 更新遊戲狀態與玩家分數
+    DB-->>Model: 更新成功
+    
+    Model-->>Route: 回傳最新狀態
+    Route-->>Player: JSON (操作成功，回傳最新分數)
+    
+    note over Player, Other: 其他玩家透過短輪詢或 WebSocket 取得狀態更新
+    
+    Other->>Route: GET /api/game/<id>/status
+    Route->>DB: 查詢最新遊戲狀態
+    DB-->>Route: 回傳最新狀態
+    Route-->>Other: JSON (拿到新分數，畫面自動更新)
 ```
 
----
+## 3. 功能清單與 URL 對照表
 
-## 3. 功能清單對照表
+在接下來的實作中，我們預計會開發以下對應的路由與頁面：
 
-統整系統所涵蓋的核心功能及其對應存取路徑，提供給前端介接與後端實作時參考。
-
-| 功能區塊 | 子功能 | URL 路徑 | HTTP 方法 / WebSocket事件 | 說明 |
-| :--- | :--- | :--- | :--- | :--- |
-| **會員管理** | 註冊帳號 | `/register` | GET, POST | GET: 註冊頁，POST: 寫入帳號資料 |
-| | 會員登入 | `/login` | GET, POST | POST: 驗證帳密並寫入 Session |
-| | 會員登出 | `/logout` | GET | 清除 Session 並導回首頁 |
-| | 個人中心 | `/profile` | GET | 顯示目前登入者的詳細戰績及排行榜 |
-| **大廳與房間** | 瀏覽大廳 | `/lobby` | GET | 查詢所有啟用的房間清單 |
-| | 建立房間 | `/room/create` | POST | 接收建立參數並寫入資料庫 |
-| | 加入房間 | `/room/join/<id>`| POST | 驗證密碼後，將該房資料與玩家結合 |
-| | 房間畫面 | `/room/<id>` | GET | 渲染特定房間之 UI 介面，準備建立 Socket |
-| **即時遊戲機制**| 加入房間頻道 | `/room/<id>` | `emit('join')` | 處理玩家 Socket 加入 SocketIO 指定的房頻道 |
-| | 即時通訊 | `/room/<id>` | `emit('chat_msg')` | 傳送訊息並由 Flask 透過 broadcast 推送給所有房客 |
-| | 遊戲動作指令 | `/room/<id>` | `emit('game_action')` | 包含出牌、下棋等指令，驗證邏輯後推播更新盤面 |
+| 功能分類 | 功能說明 | 預期 URL 路徑 | HTTP 方法 |
+| :--- | :--- | :--- | :--- |
+| **帳號/身分** | 登入或設定臨時訪客暱稱 | `/login` | GET / POST |
+| **大廳** | 顯示大廳主畫面（建立/加入房間按鈕） | `/lobby` | GET |
+| **大廳** | 查看個人的歷史紀錄與成就 | `/profile` | GET |
+| **房間管理** | 處理建立房間的請求 | `/room/create` | POST |
+| **房間管理** | 處理加入房間的請求 | `/room/join` | POST |
+| **房間管理** | 顯示房間等待區畫面 | `/room/<room_id>` | GET |
+| **遊戲** | 渲染遊戲主畫面（HTML/CSS/JS） | `/game/<room_id>` | GET |
+| **遊戲 (API)** | 前端取得最新遊戲狀態與分數 | `/api/game/<room_id>/status` | GET |
+| **遊戲 (API)** | 前端傳送玩家動作給後端仲裁 | `/api/game/<room_id>/play` | POST |
